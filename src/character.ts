@@ -39,6 +39,8 @@ interface Pose {
 export class CharacterController {
   readonly vrm: VRM;
   state: LocomotionState = 'idle';
+  /** ラグドール風崩壊の重み 0〜1（ゲル融解と連動して外部から設定） */
+  collapse = 0;
 
   private readonly mixer: THREE.AnimationMixer;
   private readonly actions = new Map<LocomotionState, THREE.AnimationAction>();
@@ -90,7 +92,8 @@ export class CharacterController {
     this.elapsed += delta;
     // 座り中に移動入力が入ったら立ち上がる
     if (this.sitting && input.move.lengthSq() > 0.04) this.sitting = false;
-    const moving = !this.sitting && input.move.lengthSq() > 0.001;
+    // 崩壊中は移動不能
+    const moving = !this.sitting && this.collapse < 0.5 && input.move.lengthSq() > 0.001;
 
     this.state = this.sitting
       ? 'sit'
@@ -134,6 +137,9 @@ export class CharacterController {
     }
     this.mixer.update(delta);
     this.applyProceduralPoses(clipWeight, moving);
+    if (this.collapse > 0.005) {
+      this.applyCollapsePose(this.collapse);
+    }
 
     this.vrm.update(delta);
 
@@ -146,26 +152,55 @@ export class CharacterController {
   private readonly tmpQ = new THREE.Quaternion();
   private readonly tmpE = new THREE.Euler();
 
+  /** ポーズを現在の姿勢に重みratioでslerp合成する */
+  private applyPose(pose: Pose, ratio: number) {
+    for (const [name, rot] of Object.entries(pose.bones)) {
+      const bone = this.vrm.humanoid.getNormalizedBoneNode(name as VRMHumanBoneName);
+      if (!bone || !rot) continue;
+      this.tmpQ.setFromEuler(this.tmpE.set(rot[0], rot[1], rot[2]));
+      bone.quaternion.slerp(this.tmpQ, ratio);
+    }
+    const hips = this.vrm.humanoid.getNormalizedBoneNode('hips');
+    if (hips) {
+      hips.position.y = THREE.MathUtils.lerp(hips.position.y, this.hipsBaseY + pose.hipsY, ratio);
+    }
+  }
+
   /** クリップの無いステートのポーズを、重みの逐次slerpでmixer結果に混ぜる */
   private applyProceduralPoses(clipWeight: number, moving: boolean) {
     let acc = clipWeight;
-    const hips = this.vrm.humanoid.getNormalizedBoneNode('hips');
     for (const s of LOCOMOTION_STATES) {
       const w = this.weights[s];
       if (this.actions.has(s) || w < 0.005) continue;
       acc += w;
-      const ratio = acc > 0 ? w / acc : 1;
-      const pose = this.statePose(s, moving);
-      for (const [name, rot] of Object.entries(pose.bones)) {
-        const bone = this.vrm.humanoid.getNormalizedBoneNode(name as VRMHumanBoneName);
-        if (!bone || !rot) continue;
-        this.tmpQ.setFromEuler(this.tmpE.set(rot[0], rot[1], rot[2]));
-        bone.quaternion.slerp(this.tmpQ, ratio);
-      }
-      if (hips) {
-        hips.position.y = THREE.MathUtils.lerp(hips.position.y, this.hipsBaseY + pose.hipsY, ratio);
-      }
+      this.applyPose(this.statePose(s, moving), acc > 0 ? w / acc : 1);
     }
+  }
+
+  /** ラグドール風の脱力崩壊。各ボーンを位相の異なるsin波で揺らしながら床へ崩す */
+  private applyCollapsePose(w: number) {
+    const t = this.elapsed;
+    const wob = (freq: number, phase: number, amp: number) => Math.sin(t * freq + phase) * amp * w;
+    this.applyPose(
+      {
+        hipsY: -0.78 * w,
+        bones: {
+          hips: [0.5 + wob(1.8, 1, 0.2), wob(1.4, 2, 0.3), wob(2.0, 0, 0.25)],
+          spine: [0.85 + wob(2.7, 0, 0.18), wob(1.9, 1, 0.25), wob(2.2, 2, 0.2)],
+          chest: [0.3 + wob(3.1, 3, 0.15), 0, wob(2.5, 1.5, 0.15)],
+          head: [0.65 + wob(2.3, 2, 0.3), wob(1.7, 0.5, 0.35), wob(2.9, 4, 0.25)],
+          leftUpperArm: [wob(2.1, 0, 0.5), 0.3, 1.25 + wob(2.6, 1, 0.2)],
+          rightUpperArm: [wob(2.4, 2, 0.5), -0.3, -1.25 + wob(2.2, 3, 0.2)],
+          leftLowerArm: [-0.5 + wob(3.0, 1, 0.4), -0.2, 0],
+          rightLowerArm: [-0.5 + wob(2.8, 4, 0.4), 0.2, 0],
+          leftUpperLeg: [0.9 + wob(2.0, 2, 0.3), 0.45, 0.35],
+          rightUpperLeg: [0.9 + wob(2.3, 5, 0.3), -0.45, -0.35],
+          leftLowerLeg: [-1.5 + wob(2.6, 3, 0.35), 0, 0],
+          rightLowerLeg: [-1.5 + wob(2.1, 1, 0.35), 0, 0],
+        },
+      },
+      w,
+    );
   }
 
   /** ステートごとのプロシージャルポーズ。なるべく優雅（背筋を伸ばし、手は前で添える） */

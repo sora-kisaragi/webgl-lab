@@ -144,7 +144,7 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (e.code === 'KeyC') character?.toggleCrouch();
   if (e.code === 'KeyX') character?.toggleSit();
-  if (e.code === 'KeyG' && current) gelMode.toggle(current.object);
+  if (e.code === 'KeyG' && current) gelMode.cycle(current.object);
 });
 window.addEventListener('keyup', (e) => pressedKeys.delete(e.code));
 const forceWalk = new URLSearchParams(location.search).has('walk');
@@ -211,14 +211,15 @@ window.lab = {
   gelMode,
   render: () => renderer.render(scene, camera),
   toggleGel: () => {
-    if (current) gelMode.toggle(current.object);
+    if (current) gelMode.cycle(current.object);
   },
 };
 
 renderer.setAnimationLoop(() => {
   const delta = clock.getDelta();
   shaderMaterial.uniforms.uTime.value = clock.elapsedTime;
-  gelMode.update(clock.elapsedTime);
+  gelMode.update(clock.elapsedTime, delta);
+  if (character) character.collapse = gelMode.meltWeight;
 
   const pad = pollGamepad();
   gamepadStatus.textContent = formatGamepad(pad);
