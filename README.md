@@ -32,6 +32,10 @@ pnpm dev
 - `docs/adr/` — 設計判断の記録（ADR）
 - `docs/notes/` — 調査・検証ノート
 
+## ロードマップ
+
+やりたいことは [Issues](https://github.com/sora-kisaragi/webgl-lab/issues) と [Wiki の Roadmap](https://github.com/sora-kisaragi/webgl-lab/wiki/Roadmap) を参照。
+
 ## スタック
 
 three.js + @pixiv/three-vrm / Vite + TypeScript / ESLint + Prettier（詳細は [ADR-0001](docs/adr/0001-tech-stack.md)）
