@@ -20,9 +20,17 @@
 - `VRMUtils.rotateVRM0()` をローダーに入れてVRM0/VRM1の向き差を吸収（VRM1は+Z向き）
 - mixer.update → vrm.update の順で呼ぶ（コントローラ内に集約した）
 
+## 実VRMAでの再生確認（同日追記）
+
+- [yv-was-taken/desktop-waifu](https://github.com/yv-was-taken/desktop-waifu)（MIT）の `Running.vrma` / `neutral_idle.vrma` を `public/models/walk.vrma` / `idle.vrma` に配置して確認
+  - 中身はMixamo由来の変換物と思われるため**ローカル検証用に留める**（gitignore済み、再配布しない）。ちゃんとしたモーションはVRoid Hub公式サンプル（要ログイン）やBOOTHで別途入手する
+- idle / walk とも `createVRMAnimationClip` でそのまま再生成功。移動時は走りモーション、停止時は待機モーションに切り替わる
+- VRMAはGLB形式だけでなく**glTF JSON形式（バッファはdata URI埋め込み）のこともある**。GLTFLoaderはどちらも読める
+- クロスフェードはweight直接操作で成立（両action常時play、walkWeightで配分）
+
 ## 次にやること
 
-- [ ] 実VRMAファイルでの再生確認（VRoid Hubのサンプルモーション等を入手して `public/models/` へ）
-- [ ] Mixamo FBX → VRM リターゲットの検証
-- [ ] idle/walk クロスフェードの実モーションでの調整（今はweight直接操作）
+- [x] 実VRMAファイルでの再生確認
+- [ ] 品質の高いモーションの入手（VRoid Hub公式サンプル等）と差し替え
+- [ ] Mixamo FBX → VRM リターゲットの検証（自前変換経路の確立）
 - [ ] 走り（速度2段階）とジャンプ
