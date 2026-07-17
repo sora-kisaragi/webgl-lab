@@ -9,7 +9,7 @@ import {
   type LoadedModel,
 } from './loaders';
 import { pollGamepad, formatGamepad } from './gamepad';
-import { CharacterController } from './character';
+import { CharacterController, LOCOMOTION_STATES, type LocomotionState } from './character';
 import demoVert from './shaders/demo.vert?raw';
 import demoFrag from './shaders/demo.frag?raw';
 
@@ -65,8 +65,9 @@ async function replaceModel(file: File) {
   try {
     if (file.name.toLowerCase().endsWith('.vrma')) {
       if (!character) return;
-      // ファイル名に idle を含むものは待機、それ以外は歩行モーションとして扱う
-      const kind = file.name.toLowerCase().includes('idle') ? 'idle' : 'walk';
+      // ファイル名に含まれるステート名で割り当てる（該当なしは walk 扱い）
+      const lower = file.name.toLowerCase();
+      const kind: LocomotionState = LOCOMOTION_STATES.find((s) => lower.includes(s)) ?? 'walk';
       character.setAnimation(kind, await loadVRMAFromFile(file));
       console.log(`[webgl-lab] vrma loaded (${kind})`);
       return;
@@ -90,7 +91,7 @@ async function loadDefaultAssets() {
   try {
     if (!(await staticFileExists(url))) return;
     setModel(await loadVRM(url));
-    for (const kind of ['idle', 'walk'] as const) {
+    for (const kind of LOCOMOTION_STATES) {
       const vrmaUrl = `/models/${kind}.vrma`;
       if (character && (await staticFileExists(vrmaUrl))) {
         character.setAnimation(kind, await loadVRMA(vrmaUrl));
@@ -133,10 +134,26 @@ window.addEventListener('resize', resize);
 resize();
 
 // 移動入力: WASD/矢印キー + GamePad左スティック（?walk で強制前進デバッグ）
+// Shift/パッドボタン0=ダッシュ、C/ボタン1=しゃがみトグル、X/ボタン2=座るトグル
 const pressedKeys = new Set<string>();
-window.addEventListener('keydown', (e) => pressedKeys.add(e.code));
+window.addEventListener('keydown', (e) => {
+  pressedKeys.add(e.code);
+  if (e.repeat) return;
+  if (e.code === 'KeyC') character?.toggleCrouch();
+  if (e.code === 'KeyX') character?.toggleSit();
+});
 window.addEventListener('keyup', (e) => pressedKeys.delete(e.code));
 const forceWalk = new URLSearchParams(location.search).has('walk');
+
+const prevPadButtons: number[] = [];
+function handlePadButtons(pad: ReturnType<typeof pollGamepad>) {
+  if (!pad.connected) return;
+  const pressed = (i: number) => (pad.buttons[i] ?? 0) > 0.5 && (prevPadButtons[i] ?? 0) <= 0.5;
+  if (pressed(1)) character?.toggleCrouch();
+  if (pressed(2)) character?.toggleSit();
+  prevPadButtons.length = 0;
+  prevPadButtons.push(...pad.buttons);
+}
 
 const DEADZONE = 0.15;
 
@@ -190,8 +207,12 @@ renderer.setAnimationLoop(() => {
   gamepadStatus.textContent = formatGamepad(pad);
 
   if (character) {
-    const worldMove = toWorldMove(readMoveInput(pad));
-    character.update(delta, worldMove);
+    handlePadButtons(pad);
+    const dash =
+      pressedKeys.has('ShiftLeft') ||
+      pressedKeys.has('ShiftRight') ||
+      (pad.connected && (pad.buttons[0] ?? 0) > 0.5);
+    character.update(delta, { move: toWorldMove(readMoveInput(pad)), dash });
     // カメラはキャラクターの胸元あたりを緩く追従する
     followTarget.copy(character.vrm.scene.position).add(new THREE.Vector3(0, 1, 0));
     controls.target.lerp(followTarget, 1 - Math.exp(-4 * delta));

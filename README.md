@@ -9,9 +9,11 @@ pnpm install
 pnpm dev
 ```
 
-ブラウザで開いて `.vrm` / `.obj` ファイルをドラッグ&ドロップすると表示される。**WASD/矢印キー、またはGamePadの左スティックでキャラクターが歩く**（VRMAモーションが無い場合はプロシージャル歩行で代用）。`.vrma` をドロップするとモーションを差し替えられる（ファイル名に `idle` を含むと待機、それ以外は歩行として扱う）。`?walk` を付けると強制前進するデバッグモード。
+ブラウザで開いて `.vrm` / `.obj` ファイルをドラッグ&ドロップすると表示される。
 
-`public/models/salome.vrm` にVRMを置くと起動時に自動で読み込まれる（`?model=/models/foo.vrm` で切り替え可）。`public/models/idle.vrma` / `walk.vrma` があればモーションも自動で読み込む。`models/` は再配布禁止のモデルを扱うため gitignore 済み。
+**操作**: WASD/矢印キー（GamePad左スティック）で移動、**Shift（パッドボタン0）長押しで走る、Cでしゃがみ、Xで座る**（トグル、移動で立ち上がる）。ロコモーションは idle/walk/run/crouch/sit の5ステートをクロスフェードで遷移し、ステートごとにVRMAクリップがあれば再生、無ければプロシージャルポーズ（優雅め: 手を前で重ねる待機、腕振り控えめの歩き、正座風の座り）で代用する。`.vrma` をドロップするとファイル名に含まれるステート名（idle/walk/run/crouch/sit）に割り当てられる。`?walk` を付けると強制前進する**デバッグモード**（検証用。付けたままにすると歩きっぱなしになるので注意）。
+
+`public/models/salome.vrm` にVRMを置くと起動時に自動で読み込まれる（`?model=/models/foo.vrm` で切り替え可）。`public/models/{idle,walk,run,crouch,sit}.vrma` があればステートのモーションとして自動で読み込む。`models/` は再配布禁止のモデルを扱うため gitignore 済み。
 
 ## スクリプト
 
