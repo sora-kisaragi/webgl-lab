@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
+import { VRMAnimationLoaderPlugin, type VRMAnimation } from '@pixiv/three-vrm-animation';
 
 export interface LoadedModel {
   object: THREE.Object3D;
@@ -11,12 +12,14 @@ export interface LoadedModel {
 
 const gltfLoader = new GLTFLoader();
 gltfLoader.register((parser) => new VRMLoaderPlugin(parser));
+gltfLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
 
 const objLoader = new OBJLoader();
 
 export async function loadVRM(url: string): Promise<LoadedModel> {
   const gltf = await gltfLoader.loadAsync(url);
   const vrm = gltf.userData.vrm as VRM;
+  VRMUtils.rotateVRM0(vrm);
   VRMUtils.removeUnnecessaryVertices(vrm.scene);
   VRMUtils.combineSkeletons(vrm.scene);
   vrm.scene.traverse((obj) => {
@@ -48,6 +51,22 @@ export async function loadOBJ(url: string): Promise<LoadedModel> {
       fallback.dispose();
     },
   };
+}
+
+export async function loadVRMA(url: string): Promise<VRMAnimation> {
+  const gltf = await gltfLoader.loadAsync(url);
+  const animations = gltf.userData.vrmAnimations as VRMAnimation[] | undefined;
+  if (!animations?.length) throw new Error('VRMアニメーションが含まれていません');
+  return animations[0];
+}
+
+export async function loadVRMAFromFile(file: File): Promise<VRMAnimation> {
+  const url = URL.createObjectURL(file);
+  try {
+    return await loadVRMA(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 export async function loadModelFromFile(file: File): Promise<LoadedModel> {
