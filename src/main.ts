@@ -10,6 +10,7 @@ import {
 } from './loaders';
 import { pollGamepad, formatGamepad } from './gamepad';
 import { CharacterController, LOCOMOTION_STATES, type LocomotionState } from './character';
+import { GelMode } from './gel';
 import demoVert from './shaders/demo.vert?raw';
 import demoFrag from './shaders/demo.frag?raw';
 
@@ -48,9 +49,11 @@ scene.add(demoMesh);
 
 let current: LoadedModel | null = null;
 let character: CharacterController | null = null;
+const gelMode = new GelMode();
 
 function setModel(model: LoadedModel) {
   if (current) {
+    gelMode.restore();
     scene.remove(current.object);
     current.dispose();
   }
@@ -141,6 +144,7 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (e.code === 'KeyC') character?.toggleCrouch();
   if (e.code === 'KeyX') character?.toggleSit();
+  if (e.code === 'KeyG' && current) gelMode.toggle(current.object);
 });
 window.addEventListener('keyup', (e) => pressedKeys.delete(e.code));
 const forceWalk = new URLSearchParams(location.search).has('walk');
@@ -189,7 +193,14 @@ const followTarget = new THREE.Vector3();
 // デバッグ用にコンソールから参照できるようにする
 declare global {
   interface Window {
-    lab: { character: CharacterController | null; camera: THREE.PerspectiveCamera };
+    lab: {
+      character: CharacterController | null;
+      camera: THREE.PerspectiveCamera;
+      gelMode: GelMode;
+      /** タブ非表示でrAFが止まっていても手動で1フレーム描画する */
+      render: () => void;
+      toggleGel: () => void;
+    };
   }
 }
 window.lab = {
@@ -197,11 +208,17 @@ window.lab = {
     return character;
   },
   camera,
+  gelMode,
+  render: () => renderer.render(scene, camera),
+  toggleGel: () => {
+    if (current) gelMode.toggle(current.object);
+  },
 };
 
 renderer.setAnimationLoop(() => {
   const delta = clock.getDelta();
   shaderMaterial.uniforms.uTime.value = clock.elapsedTime;
+  gelMode.update(clock.elapsedTime);
 
   const pad = pollGamepad();
   gamepadStatus.textContent = formatGamepad(pad);
