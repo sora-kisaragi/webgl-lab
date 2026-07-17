@@ -11,6 +11,8 @@ pnpm dev
 
 ブラウザで開いて `.vrm` / `.obj` ファイルをドラッグ&ドロップすると表示される。GamePad はボタンを押すと認識され、左スティックでモデルが回転する。
 
+`public/models/salome.vrm` にVRMを置くと起動時に自動で読み込まれる（`?model=/models/foo.vrm` で切り替え可）。`models/` は再配布禁止のモデルを扱うため gitignore 済み。
+
 ## スクリプト
 
 | コマンド      | 内容                         |

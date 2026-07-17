@@ -1,7 +1,7 @@
 import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadModelFromFile, type LoadedModel } from './loaders';
+import { loadModelFromFile, loadVRM, type LoadedModel } from './loaders';
 import { pollGamepad, formatGamepad } from './gamepad';
 import demoVert from './shaders/demo.vert?raw';
 import demoFrag from './shaders/demo.frag?raw';
@@ -41,20 +41,39 @@ scene.add(demoMesh);
 
 let current: LoadedModel | null = null;
 
+function setModel(model: LoadedModel) {
+  if (current) {
+    scene.remove(current.object);
+    current.dispose();
+  }
+  current = model;
+  demoMesh.visible = false;
+  scene.add(model.object);
+  console.log('[webgl-lab] model loaded');
+}
+
 async function replaceModel(file: File) {
   try {
-    const model = await loadModelFromFile(file);
-    if (current) {
-      scene.remove(current.object);
-      current.dispose();
-    }
-    current = model;
-    demoMesh.visible = false;
-    scene.add(model.object);
+    setModel(await loadModelFromFile(file));
   } catch (err) {
     console.error(err);
   }
 }
+
+// public/models/ に置いたVRM（gitignore対象）を起動時に自動読み込みする。
+// ?model=/models/foo.vrm で切り替え可。無ければデモメッシュのまま
+async function loadDefaultModel() {
+  const url = new URLSearchParams(location.search).get('model') ?? '/models/salome.vrm';
+  try {
+    const head = await fetch(url, { method: 'HEAD' });
+    // 未配置時はdevサーバーのSPAフォールバックが index.html を返すので弾く
+    if (!head.ok || head.headers.get('content-type')?.includes('text/html')) return;
+    setModel(await loadVRM(url));
+  } catch {
+    // デフォルトモデル未配置は正常系
+  }
+}
+void loadDefaultModel();
 
 fileInput.addEventListener('change', () => {
   const file = fileInput.files?.[0];

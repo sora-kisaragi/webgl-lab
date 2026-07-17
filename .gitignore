@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# ローカル検証用モデル（再配布禁止のものを含むためコミットしない）
+models/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
