@@ -11,6 +11,7 @@ import {
 import { pollGamepad, formatGamepad } from './gamepad';
 import { CharacterController, LOCOMOTION_STATES, type LocomotionState } from './character';
 import { GelMode } from './gel';
+import { Ragdoll } from './ragdoll';
 import demoVert from './shaders/demo.vert?raw';
 import demoFrag from './shaders/demo.frag?raw';
 
@@ -49,11 +50,33 @@ scene.add(demoMesh);
 
 let current: LoadedModel | null = null;
 let character: CharacterController | null = null;
+let ragdoll: Ragdoll | null = null;
+let ragdollLoading = false;
 const gelMode = new GelMode();
+
+function toggleRagdoll() {
+  if (ragdoll) {
+    ragdoll.dispose();
+    ragdoll = null;
+    return;
+  }
+  if (!character || ragdollLoading) return;
+  ragdollLoading = true;
+  Ragdoll.create(character.vrm)
+    .then((r) => {
+      ragdoll = r;
+    })
+    .catch(console.error)
+    .finally(() => {
+      ragdollLoading = false;
+    });
+}
 
 function setModel(model: LoadedModel) {
   if (current) {
     gelMode.restore();
+    ragdoll?.dispose();
+    ragdoll = null;
     scene.remove(current.object);
     current.dispose();
   }
@@ -145,6 +168,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyC') character?.toggleCrouch();
   if (e.code === 'KeyX') character?.toggleSit();
   if (e.code === 'KeyG' && current) gelMode.cycle(current.object);
+  if (e.code === 'KeyR') toggleRagdoll();
 });
 window.addEventListener('keyup', (e) => pressedKeys.delete(e.code));
 const forceWalk = new URLSearchParams(location.search).has('walk');
@@ -187,6 +211,43 @@ function toWorldMove(input: THREE.Vector2): THREE.Vector2 {
   ).clampLength(0, 1);
 }
 
+// ?rdtest: タブ非表示でも動くラグドール自己診断（検証後に削除）
+if (new URLSearchParams(location.search).has('rdtest')) {
+  setTimeout(async () => {
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    for (let i = 0; i < 30 && !character; i++) await wait(300);
+    if (!current || !character) {
+      console.log('[rdtest] no model');
+      return;
+    }
+    gelMode.cycle(current.object);
+    toggleRagdoll();
+    for (let i = 0; i < 30 && !ragdoll; i++) await wait(300);
+    if (!ragdoll) {
+      console.log('[rdtest] ragdoll timeout');
+      return;
+    }
+    let t = 0;
+    for (let i = 0; i < 240; i++) {
+      t += 1 / 60;
+      ragdoll.step(1 / 60);
+      gelMode.update(t, 1 / 60);
+    }
+    let nan: string | null = null;
+    character.vrm.scene.traverse((o) => {
+      if (!nan && (Number.isNaN(o.position.x) || Number.isNaN(o.quaternion.x))) nan = o.name || '?';
+    });
+    const head = character.vrm.humanoid.getRawBoneNode('head');
+    head?.updateWorldMatrix(true, false);
+    const e = head?.matrixWorld.elements ?? [];
+    renderer.render(scene, camera);
+    console.log(
+      '[rdtest]',
+      JSON.stringify({ nan, head: [e[12], e[13], e[14]].map((v) => v?.toFixed(2)) }),
+    );
+  }, 2000);
+}
+
 const clock = new THREE.Clock();
 const followTarget = new THREE.Vector3();
 
@@ -197,9 +258,11 @@ declare global {
       character: CharacterController | null;
       camera: THREE.PerspectiveCamera;
       gelMode: GelMode;
+      ragdoll: Ragdoll | null;
       /** タブ非表示でrAFが止まっていても手動で1フレーム描画する */
       render: () => void;
       toggleGel: () => void;
+      toggleRagdoll: () => void;
     };
   }
 }
@@ -209,6 +272,10 @@ window.lab = {
   },
   camera,
   gelMode,
+  get ragdoll() {
+    return ragdoll;
+  },
+  toggleRagdoll,
   render: () => renderer.render(scene, camera),
   toggleGel: () => {
     if (current) gelMode.cycle(current.object);
@@ -224,7 +291,9 @@ renderer.setAnimationLoop(() => {
   const pad = pollGamepad();
   gamepadStatus.textContent = formatGamepad(pad);
 
-  if (character) {
+  if (ragdoll) {
+    ragdoll.step(delta);
+  } else if (character) {
     handlePadButtons(pad);
     const dash =
       pressedKeys.has('ShiftLeft') ||
