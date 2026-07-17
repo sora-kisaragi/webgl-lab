@@ -19,6 +19,8 @@ export class CharacterController {
   private walkAction: THREE.AnimationAction | null = null;
   private phase = 0;
   private walkWeight = 0;
+  private facingOffset = 0;
+  private calibrated = false;
 
   constructor(vrm: VRM) {
     this.vrm = vrm;
@@ -31,6 +33,7 @@ export class CharacterController {
 
   setAnimation(kind: 'idle' | 'walk', animation: VRMAnimation) {
     const clip = createVRMAnimationClip(animation, this.vrm);
+    this.calibrated = false;
     const action = this.mixer.clipAction(clip);
     action.play();
     if (kind === 'idle') {
@@ -45,7 +48,7 @@ export class CharacterController {
     const obj = this.vrm.scene;
 
     if (moving) {
-      const targetYaw = Math.atan2(move.x, move.y);
+      const targetYaw = Math.atan2(move.x, move.y) - this.facingOffset;
       let diff = targetYaw - obj.rotation.y;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       obj.rotation.y += diff * Math.min(1, TURN_DAMP * delta);
@@ -64,6 +67,29 @@ export class CharacterController {
 
     this.mixer.update(delta);
     this.vrm.update(delta);
+
+    if (!this.calibrated) {
+      this.calibrateFacing();
+      this.calibrated = true;
+    }
+  }
+
+  /**
+   * モデルの向き規約はVRM0/VRM1やモーションの変換元によってπズレることがあるため、
+   * 推測ではなく実際の顔の向き（両目の中点と頭の位置関係）を実測して補正値を求める。
+   * 姿勢由来のブレを避けるため 0 か π に丸める。目が無いモデルは補正なし。
+   */
+  private calibrateFacing() {
+    const head = this.vrm.humanoid.getRawBoneNode('head');
+    const leftEye = this.vrm.humanoid.getRawBoneNode('leftEye');
+    const rightEye = this.vrm.humanoid.getRawBoneNode('rightEye');
+    if (!head || !leftEye || !rightEye) return;
+    this.vrm.scene.updateWorldMatrix(true, true);
+    const pos = (n: THREE.Object3D) => new THREE.Vector3().setFromMatrixPosition(n.matrixWorld);
+    const face = pos(leftEye).add(pos(rightEye)).multiplyScalar(0.5).sub(pos(head));
+    const diff = Math.atan2(face.x, face.z) - this.vrm.scene.rotation.y;
+    const wrapped = Math.atan2(Math.sin(diff), Math.cos(diff));
+    this.facingOffset = Math.abs(wrapped) > Math.PI / 2 ? Math.PI : 0;
   }
 
   private setBoneRotation(name: VRMHumanBoneName, x = 0, y = 0, z = 0) {

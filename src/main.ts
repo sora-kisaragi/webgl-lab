@@ -154,8 +154,33 @@ function readMoveInput(pad: ReturnType<typeof pollGamepad>): THREE.Vector2 {
   return move.clampLength(0, 1);
 }
 
+// 画面基準の入力（W=奥、D=右）をカメラの向きに合わせてワールドXZへ変換する
+const cameraDir = new THREE.Vector3();
+function toWorldMove(input: THREE.Vector2): THREE.Vector2 {
+  camera.getWorldDirection(cameraDir);
+  const forward = new THREE.Vector2(cameraDir.x, cameraDir.z).normalize();
+  const right = new THREE.Vector2(-forward.y, forward.x);
+  return new THREE.Vector2(
+    right.x * input.x - forward.x * input.y,
+    right.y * input.x - forward.y * input.y,
+  ).clampLength(0, 1);
+}
+
 const clock = new THREE.Clock();
 const followTarget = new THREE.Vector3();
+
+// デバッグ用にコンソールから参照できるようにする
+declare global {
+  interface Window {
+    lab: { character: CharacterController | null; camera: THREE.PerspectiveCamera };
+  }
+}
+window.lab = {
+  get character() {
+    return character;
+  },
+  camera,
+};
 
 renderer.setAnimationLoop(() => {
   const delta = clock.getDelta();
@@ -165,7 +190,8 @@ renderer.setAnimationLoop(() => {
   gamepadStatus.textContent = formatGamepad(pad);
 
   if (character) {
-    character.update(delta, readMoveInput(pad));
+    const worldMove = toWorldMove(readMoveInput(pad));
+    character.update(delta, worldMove);
     // カメラはキャラクターの胸元あたりを緩く追従する
     followTarget.copy(character.vrm.scene.position).add(new THREE.Vector3(0, 1, 0));
     controls.target.lerp(followTarget, 1 - Math.exp(-4 * delta));
